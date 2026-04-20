@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { z } from "zod";
+import { supabase } from "@/integrations/supabase/client";
 
 const schema = z.object({
   name: z.string().trim().min(1, "Name is required").max(100),
@@ -33,11 +34,22 @@ const QuoteForm = ({ variant = "card" }: QuoteFormProps) => {
       return;
     }
     setSubmitting(true);
-    // Simulate async submission — wire to backend later
-    await new Promise((r) => setTimeout(r, 700));
-    setSubmitting(false);
-    setDone(true);
-    toast.success("Quote request sent! We'll be in touch within 24 hours.");
+    try {
+      const { data: result, error } = await supabase.functions.invoke(
+        "send-quote-request",
+        { body: parsed.data },
+      );
+      if (error || !result?.success) {
+        throw new Error(error?.message || result?.error || "Submission failed");
+      }
+      setDone(true);
+      toast.success("Quote request sent! We'll be in touch within 24 hours.");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Something went wrong";
+      toast.error(`Couldn't send: ${msg}. Please call (737) 235-8019.`);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (done) {
