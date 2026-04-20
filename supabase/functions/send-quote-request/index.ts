@@ -9,7 +9,7 @@ const corsHeaders = {
 
 const GATEWAY_URL = "https://connector-gateway.lovable.dev/resend";
 const NOTIFY_TO = "getprettypotty@gmail.com";
-const FROM_ADDRESS = "Pretty Potty <onboarding@resend.dev>";
+const FROM_ADDRESS = "Pretty Potty <hello@getprettypotty.com>";
 
 const schema = z.object({
   name: z.string().trim().min(1).max(100),
@@ -123,7 +123,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         from: FROM_ADDRESS,
         to: [data.email],
-        reply_to: NOTIFY_TO,
+        reply_to: "getprettypotty@gmail.com",
         subject: "We got your request — Pretty Potty Austin",
         html: confirmHtml,
       }),
