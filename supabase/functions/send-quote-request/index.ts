@@ -9,7 +9,7 @@ const corsHeaders = {
 
 const GATEWAY_URL = "https://connector-gateway.lovable.dev/resend";
 const NOTIFY_TO = "getprettypotty@gmail.com";
-const FROM_ADDRESS = "Pretty Potty <onboarding@resend.dev>";
+const FROM_ADDRESS = "Pretty Potty <hello@getprettypotty.com>";
 
 const schema = z.object({
   name: z.string().trim().min(1).max(100),
