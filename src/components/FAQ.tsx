@@ -8,7 +8,7 @@ import {
 const FAQS = [
   {
     q: "How much does a luxury restroom trailer rental cost?",
-    a: "Pricing varies based on your event date, location, duration, and trailer size. Our 3-stall luxury trailer typically starts at $1,200 for a one-day event in the Austin area. Request a quote and we'll send custom pricing within 24 hours.",
+    a: "Pricing varies based on your event date, location, and duration. Half-day events start at $1,000 and full wedding-day rentals start at $1,400 in the Austin area. Request a quote and we'll send custom pricing within 24 hours.",
   },
   {
     q: "How long does setup take?",
