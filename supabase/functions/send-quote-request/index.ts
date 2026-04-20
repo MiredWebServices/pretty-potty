@@ -123,7 +123,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         from: FROM_ADDRESS,
         to: [data.email],
-        reply_to: NOTIFY_TO,
+        reply_to: "getprettypotty@gmail.com",
         subject: "We got your request — Pretty Potty Austin",
         html: confirmHtml,
       }),
