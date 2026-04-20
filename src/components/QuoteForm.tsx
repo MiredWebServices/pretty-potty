@@ -71,7 +71,7 @@ const QuoteForm = ({ variant = "card" }: QuoteFormProps) => {
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="phone">Phone</Label>
-          <Input id="phone" name="phone" type="tel" placeholder="(512) 555-0188" required />
+          <Input id="phone" name="phone" type="tel" placeholder="(737) 235-8019" required />
         </div>
         <div className="space-y-1.5 sm:col-span-2">
           <Label htmlFor="email">Email</Label>
