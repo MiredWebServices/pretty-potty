@@ -46,7 +46,7 @@ const QuoteForm = ({ variant = "card" }: QuoteFormProps) => {
       toast.success("Quote request sent! We'll be in touch within 24 hours.");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Something went wrong";
-      toast.error(`Couldn't send: ${msg}. Please call (737) 235-8019.`);
+      toast.error(`Couldn't send: ${msg}. Please call (512) 270-5164.`);
     } finally {
       setSubmitting(false);
     }
@@ -83,7 +83,7 @@ const QuoteForm = ({ variant = "card" }: QuoteFormProps) => {
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="phone">Phone</Label>
-          <Input id="phone" name="phone" type="tel" placeholder="(737) 235-8019" required />
+          <Input id="phone" name="phone" type="tel" placeholder="(512) 270-5164" required />
         </div>
         <div className="space-y-1.5 sm:col-span-2">
           <Label htmlFor="email">Email</Label>

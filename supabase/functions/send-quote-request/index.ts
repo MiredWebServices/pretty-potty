@@ -7,7 +7,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-const GATEWAY_URL = "https://connector-gateway.lovable.dev/resend";
+const RESEND_API_URL = "https://api.resend.com/emails";
 const NOTIFY_TO = "getprettypotty@gmail.com";
 const FROM_ADDRESS = "Pretty Potty <hello@getprettypotty.com>";
 
@@ -30,12 +30,11 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    if (!LOVABLE_API_KEY || !RESEND_API_KEY) {
+    if (!RESEND_API_KEY) {
       throw new Error("Email service not configured");
     }
 
@@ -77,12 +76,11 @@ Deno.serve(async (req) => {
       <p><strong>Message:</strong><br/>${escape(data.message || "—").replace(/\n/g, "<br/>")}</p>
     `;
 
-    const notifyRes = await fetch(`${GATEWAY_URL}/emails`, {
+    const notifyRes = await fetch(RESEND_API_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "X-Connection-Api-Key": RESEND_API_KEY,
+        Authorization: `Bearer ${RESEND_API_KEY}`,
       },
       body: JSON.stringify({
         from: FROM_ADDRESS,
@@ -108,17 +106,16 @@ Deno.serve(async (req) => {
           <li><strong>Location:</strong> ${escape(data.location || "—")}</li>
           <li><strong>Guest count:</strong> ${escape(data.guests || "—")}</li>
         </ul>
-        <p>If your event is urgent, call or text us at <strong>(737) 235-8019</strong>.</p>
+        <p>If your event is urgent, call or text us at <strong>(512) 270-5164</strong>.</p>
         <p style="margin-top:24px;">— The Pretty Potty team</p>
       </div>
     `;
 
-    const confirmRes = await fetch(`${GATEWAY_URL}/emails`, {
+    const confirmRes = await fetch(RESEND_API_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "X-Connection-Api-Key": RESEND_API_KEY,
+        Authorization: `Bearer ${RESEND_API_KEY}`,
       },
       body: JSON.stringify({
         from: FROM_ADDRESS,

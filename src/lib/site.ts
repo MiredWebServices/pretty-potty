@@ -1,8 +1,8 @@
 export const SITE = {
   name: "Pretty Potty",
   tagline: "Elevated Restroom Experiences",
-  phone: "(737) 235-8019",
-  phoneLink: "tel:+17372358019",
+  phone: "(512) 270-5164",
+  phoneLink: "tel:+15122705164",
   email: "getprettypotty@gmail.com",
   city: "Austin, TX",
   serviceArea: "Austin, Round Rock, Dripping Springs, Georgetown, Wimberley, Fredericksburg, San Marcos & all of Central Texas",
