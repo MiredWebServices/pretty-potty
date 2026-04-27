@@ -143,6 +143,44 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (action === "list_sent") {
+      const limit = Math.min(Number(url.searchParams.get("limit") ?? 100), 500);
+      const q = url.searchParams.get("q")?.trim() ?? "";
+
+      let query = supabase
+        .from("outbound_replies")
+        .select(
+          "id, inbound_email_id, from_address, to_addresses, subject, body_text, sent_by, created_at",
+        )
+        .order("created_at", { ascending: false })
+        .limit(limit);
+
+      if (q) {
+        // outbound_replies has no FTS; do a simple ilike across subject + body.
+        const like = `%${q.replace(/[%_]/g, (m) => `\\${m}`)}%`;
+        query = query.or(
+          `subject.ilike.${like},body_text.ilike.${like}`,
+        );
+      }
+
+      const { data, error } = await query;
+      if (error) return json({ error: error.message }, 500);
+      return json({ emails: data ?? [] });
+    }
+
+    if (action === "get_sent") {
+      const id = url.searchParams.get("id");
+      if (!id) return json({ error: "Missing id" }, 400);
+      const { data, error } = await supabase
+        .from("outbound_replies")
+        .select("*")
+        .eq("id", id)
+        .maybeSingle();
+      if (error) return json({ error: error.message }, 500);
+      if (!data) return json({ error: "Not found" }, 404);
+      return json({ reply: data });
+    }
+
     if (action === "archive" || action === "unarchive") {
       const id = url.searchParams.get("id");
       if (!id) return json({ error: "Missing id" }, 400);

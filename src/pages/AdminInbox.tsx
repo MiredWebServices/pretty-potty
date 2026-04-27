@@ -42,6 +42,23 @@ interface InboundDetail extends InboundListItem {
   html_body: string | null;
 }
 
+interface SentItem {
+  id: string;
+  inbound_email_id: string | null;
+  from_address: string;
+  to_addresses: string[];
+  subject: string | null;
+  body_text: string | null;
+  sent_by: string;
+  created_at: string;
+}
+
+interface SentDetail extends SentItem {
+  body_html: string | null;
+  in_reply_to: string | null;
+  resend_email_id: string | null;
+}
+
 interface ThreadInbound {
   id: string;
   from_address: string;
@@ -129,12 +146,16 @@ const AdminInbox = () => {
   const [forbidden, setForbidden] = useState(false);
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState(""); // debounced
-  const [view, setView] = useState<"inbox" | "archived">("inbox");
+  const [view, setView] = useState<"inbox" | "archived" | "sent">("inbox");
 
   // Detail + thread
   const [selected, setSelected] = useState<InboundDetail | null>(null);
   const [thread, setThread] = useState<Thread>({ inbounds: [], replies: [] });
   const [selectedLoading, setSelectedLoading] = useState(false);
+
+  // Sent
+  const [sentEmails, setSentEmails] = useState<SentItem[]>([]);
+  const [selectedSent, setSelectedSent] = useState<SentDetail | null>(null);
 
   // Reply composer
   const [replyBody, setReplyBody] = useState("");
@@ -200,13 +221,20 @@ const AdminInbox = () => {
     setLoading(true);
     setForbidden(false);
     try {
-      const params: Record<string, string> = {
-        action: "list",
-        archived: view === "archived" ? "true" : "false",
-      };
-      if (searchQuery) params.q = searchQuery;
-      const { emails } = await callFn("list-inbound-emails", { method: "GET" }, params);
-      setEmails(emails ?? []);
+      if (view === "sent") {
+        const params: Record<string, string> = { action: "list_sent" };
+        if (searchQuery) params.q = searchQuery;
+        const { emails } = await callFn("list-inbound-emails", { method: "GET" }, params);
+        setSentEmails(emails ?? []);
+      } else {
+        const params: Record<string, string> = {
+          action: "list",
+          archived: view === "archived" ? "true" : "false",
+        };
+        if (searchQuery) params.q = searchQuery;
+        const { emails } = await callFn("list-inbound-emails", { method: "GET" }, params);
+        setEmails(emails ?? []);
+      }
     } catch (err) {
       const status = (err as Error & { status?: number }).status;
       if (status === 403) setForbidden(true);
@@ -278,10 +306,43 @@ const AdminInbox = () => {
     };
   }, [unreadCount]);
 
+  // ---------- sent detail ----------
+  const openSent = async (id: string) => {
+    setSelectedLoading(true);
+    setSelected(null);
+    setSelectedSent(null);
+    setThread({ inbounds: [], replies: [] });
+    try {
+      const { reply } = await callFn(
+        "list-inbound-emails",
+        { method: "GET" },
+        { action: "get_sent", id },
+      );
+      // If this reply has a parent inbound, open the inbound thread so the
+      // admin can see the full conversation. Otherwise show the reply alone.
+      if (reply?.inbound_email_id) {
+        const { email, thread } = await callFn(
+          "list-inbound-emails",
+          { method: "GET" },
+          { action: "get", id: reply.inbound_email_id },
+        );
+        setSelected(email);
+        setThread(thread ?? { inbounds: [], replies: [] });
+      } else {
+        setSelectedSent(reply);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to load email");
+    } finally {
+      setSelectedLoading(false);
+    }
+  };
+
   // ---------- email detail ----------
   const openEmail = async (id: string) => {
     setSelectedLoading(true);
     setSelected(null);
+    setSelectedSent(null);
     setThread({ inbounds: [], replies: [] });
     setReplyBody("");
     try {
@@ -576,7 +637,10 @@ const AdminInbox = () => {
           <div>
             <h1 className="font-serif text-2xl">Admin Inbox</h1>
             <p className="text-xs text-muted-foreground">
-              {session.user.email} · {emails.length} email{emails.length === 1 ? "" : "s"} · {unreadCount} unread
+              {session.user.email} ·{" "}
+              {view === "sent"
+                ? `${sentEmails.length} sent email${sentEmails.length === 1 ? "" : "s"}`
+                : `${emails.length} email${emails.length === 1 ? "" : "s"} · ${unreadCount} unread`}
             </p>
           </div>
           <div className="flex flex-wrap gap-2 items-center">
@@ -594,6 +658,13 @@ const AdminInbox = () => {
                 className={`px-3 py-1.5 ${view === "inbox" ? "bg-primary text-primary-foreground" : "bg-background"}`}
               >
                 Inbox
+              </button>
+              <button
+                type="button"
+                onClick={() => setView("sent")}
+                className={`px-3 py-1.5 border-l ${view === "sent" ? "bg-primary text-primary-foreground" : "bg-background"}`}
+              >
+                Sent
               </button>
               <button
                 type="button"
@@ -618,48 +689,126 @@ const AdminInbox = () => {
 
       <main className="container-tight py-6 grid gap-4 md:grid-cols-[360px_1fr]">
         <aside className="border rounded-lg overflow-hidden bg-card">
-          {emails.length === 0 && !loading && (
-            <div className="p-6 text-sm text-muted-foreground">
-              {view === "archived" ? "No archived emails." : searchQuery ? "No matches." : "No emails yet."}
-            </div>
+          {view === "sent" ? (
+            <>
+              {sentEmails.length === 0 && !loading && (
+                <div className="p-6 text-sm text-muted-foreground">
+                  {searchQuery ? "No matches." : "No sent emails yet."}
+                </div>
+              )}
+              <ul className="divide-y max-h-[75vh] overflow-y-auto">
+                {sentEmails.map((e) => {
+                  const isSelected =
+                    selectedSent?.id === e.id ||
+                    (e.inbound_email_id != null && selected?.id === e.inbound_email_id);
+                  const recipients = e.to_addresses
+                    .map((a) => parseAddress(a).name)
+                    .join(", ");
+                  return (
+                    <li key={e.id}>
+                      <button
+                        type="button"
+                        onClick={() => openSent(e.id)}
+                        className={`w-full text-left p-4 hover:bg-accent transition-colors ${isSelected ? "bg-accent" : ""}`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-sm truncate">
+                            <span className="text-muted-foreground">To: </span>
+                            {recipients || "(no recipient)"}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                            {formatDate(e.created_at)}
+                          </span>
+                        </div>
+                        <div className="text-sm truncate text-muted-foreground">
+                          {e.subject || "(no subject)"}
+                        </div>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          ) : (
+            <>
+              {emails.length === 0 && !loading && (
+                <div className="p-6 text-sm text-muted-foreground">
+                  {view === "archived" ? "No archived emails." : searchQuery ? "No matches." : "No emails yet."}
+                </div>
+              )}
+              <ul className="divide-y max-h-[75vh] overflow-y-auto">
+                {emails.map((e) => {
+                  const isSelected = selected?.id === e.id;
+                  const unread = !e.read_at;
+                  const { name } = parseAddress(e.from_address);
+                  return (
+                    <li key={e.id}>
+                      <button
+                        type="button"
+                        onClick={() => openEmail(e.id)}
+                        className={`w-full text-left p-4 hover:bg-accent transition-colors ${isSelected ? "bg-accent" : ""}`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className={`text-sm truncate ${unread ? "font-semibold" : ""}`}>{name}</span>
+                          <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                            {formatDate(e.received_at)}
+                          </span>
+                        </div>
+                        <div className={`text-sm truncate ${unread ? "font-medium" : "text-muted-foreground"}`}>
+                          {e.subject || "(no subject)"}
+                        </div>
+                        {e.attachments?.length > 0 && (
+                          <div className="text-[10px] text-muted-foreground mt-1">
+                            📎 {e.attachments.length} attachment{e.attachments.length === 1 ? "" : "s"}
+                          </div>
+                        )}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
           )}
-          <ul className="divide-y max-h-[75vh] overflow-y-auto">
-            {emails.map((e) => {
-              const isSelected = selected?.id === e.id;
-              const unread = !e.read_at;
-              const { name } = parseAddress(e.from_address);
-              return (
-                <li key={e.id}>
-                  <button
-                    type="button"
-                    onClick={() => openEmail(e.id)}
-                    className={`w-full text-left p-4 hover:bg-accent transition-colors ${isSelected ? "bg-accent" : ""}`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className={`text-sm truncate ${unread ? "font-semibold" : ""}`}>{name}</span>
-                      <span className="text-[10px] text-muted-foreground whitespace-nowrap">
-                        {formatDate(e.received_at)}
-                      </span>
-                    </div>
-                    <div className={`text-sm truncate ${unread ? "font-medium" : "text-muted-foreground"}`}>
-                      {e.subject || "(no subject)"}
-                    </div>
-                    {e.attachments?.length > 0 && (
-                      <div className="text-[10px] text-muted-foreground mt-1">
-                        📎 {e.attachments.length} attachment{e.attachments.length === 1 ? "" : "s"}
-                      </div>
-                    )}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
         </aside>
 
         <section className="border rounded-lg bg-card p-6 min-h-[60vh]">
           {selectedLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
-          {!selectedLoading && !selected && (
+          {!selectedLoading && !selected && !selectedSent && (
             <p className="text-sm text-muted-foreground">Select an email to read.</p>
+          )}
+          {!selectedLoading && selectedSent && (
+            <article className="space-y-4">
+              <header className="space-y-1 border-b pb-4">
+                <h2 className="font-serif text-xl break-words">
+                  {selectedSent.subject || "(no subject)"}
+                </h2>
+                <p className="text-sm">
+                  <span className="text-muted-foreground">From: </span>
+                  <strong>{parseAddress(selectedSent.from_address).name}</strong>{" "}
+                  <span className="text-muted-foreground">
+                    &lt;{parseAddress(selectedSent.from_address).email}&gt;
+                  </span>
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  To: {selectedSent.to_addresses.join(", ")}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Sent {new Date(selectedSent.created_at).toLocaleString()} by {selectedSent.sent_by}
+                </p>
+              </header>
+              {selectedSent.body_html ? (
+                <iframe
+                  title="sent-body"
+                  sandbox=""
+                  srcDoc={selectedSent.body_html}
+                  className="w-full min-h-[300px] border rounded bg-white"
+                />
+              ) : (
+                <pre className="whitespace-pre-wrap text-sm font-sans">
+                  {selectedSent.body_text || "(no body)"}
+                </pre>
+              )}
+            </article>
           )}
           {selected && (
             <article className="space-y-4">
@@ -683,11 +832,11 @@ const AdminInbox = () => {
                     <Button variant="outline" size="sm" onClick={() => archiveSelected(false)}>
                       Restore
                     </Button>
-                  ) : (
+                  ) : view === "inbox" ? (
                     <Button variant="outline" size="sm" onClick={() => archiveSelected(true)}>
                       Archive
                     </Button>
-                  )}
+                  ) : null}
                 </div>
               </header>
 
