@@ -12,6 +12,9 @@ import Pricing from "./pages/Pricing.tsx";
 import Gallery from "./pages/Gallery.tsx";
 import Contact from "./pages/Contact.tsx";
 import AdminInbox from "./pages/AdminInbox.tsx";
+import AdminInvoices from "./pages/AdminInvoices.tsx";
+import AdminInvoiceNew from "./pages/AdminInvoiceNew.tsx";
+import PublicInvoice from "./pages/PublicInvoice.tsx";
 
 const queryClient = new QueryClient();
 
@@ -32,6 +35,9 @@ const App = () => (
           <Route path="/gallery" element={<Gallery />} />
           <Route path="/contact" element={<Contact />} />
           <Route path="/admin/inbox" element={<AdminInbox />} />
+          <Route path="/admin/invoices" element={<AdminInvoices />} />
+          <Route path="/admin/invoices/new" element={<AdminInvoiceNew />} />
+          <Route path="/i/:token" element={<PublicInvoice />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
