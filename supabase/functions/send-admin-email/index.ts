@@ -15,6 +15,19 @@ const RESEND_API_URL = "https://api.resend.com/emails";
 const FROM_ADDRESS = "Pretty Potty <hello@getprettypotty.com>";
 const REPLY_TO_ADDRESS = "hello@getprettypotty.com";
 
+const SIGNATURE_TEXT = `--
+Pretty Potty · Elevated Restroom Experiences
+(512) 270-5164 · https://getprettypotty.com
+Austin, TX & all of Central Texas`;
+
+const SIGNATURE_HTML = `
+<p style="margin-top:24px;color:#666;font-size:13px;line-height:1.5;border-top:1px solid #eee;padding-top:12px;">
+  <strong style="color:#222;">Pretty Potty</strong> · Elevated Restroom Experiences<br/>
+  <a href="tel:+15122705164" style="color:#666;text-decoration:none;">(512) 270-5164</a> ·
+  <a href="https://getprettypotty.com" style="color:#666;text-decoration:none;">getprettypotty.com</a><br/>
+  Austin, TX &amp; all of Central Texas
+</p>`;
+
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
@@ -72,10 +85,12 @@ Deno.serve(async (req) => {
       : [body.to.trim()];
     if (recipients.length === 0) return json({ error: "No valid recipients" }, 400);
 
-    const textBody = body.body.trim();
+    const userText = body.body.trim();
+    const textBody = `${userText}\n\n${SIGNATURE_TEXT}`;
     const htmlBody = `
       <div style="font-family: Arial, sans-serif; color: #222; font-size: 14px; line-height: 1.5;">
-        ${escapeHtml(textBody).replace(/\n/g, "<br/>")}
+        <div>${escapeHtml(userText).replace(/\n/g, "<br/>")}</div>
+        ${SIGNATURE_HTML}
       </div>
     `;
 

@@ -16,6 +16,21 @@ const RESEND_API_URL = "https://api.resend.com/emails";
 const FROM_ADDRESS = "Pretty Potty <hello@getprettypotty.com>";
 const REPLY_TO_ADDRESS = "hello@getprettypotty.com";
 
+// Signature appended to every outbound email. Helps deliverability (looks like
+// a real business email) and keeps branding consistent.
+const SIGNATURE_TEXT = `--
+Pretty Potty · Elevated Restroom Experiences
+(512) 270-5164 · https://getprettypotty.com
+Austin, TX & all of Central Texas`;
+
+const SIGNATURE_HTML = `
+<p style="margin-top:24px;color:#666;font-size:13px;line-height:1.5;border-top:1px solid #eee;padding-top:12px;">
+  <strong style="color:#222;">Pretty Potty</strong> · Elevated Restroom Experiences<br/>
+  <a href="tel:+15122705164" style="color:#666;text-decoration:none;">(512) 270-5164</a> ·
+  <a href="https://getprettypotty.com" style="color:#666;text-decoration:none;">getprettypotty.com</a><br/>
+  Austin, TX &amp; all of Central Texas
+</p>`;
+
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
@@ -69,10 +84,10 @@ Deno.serve(async (req) => {
       return json({ error: "inbound_email_id and body are required" }, 400);
     }
 
-    // 4. Look up inbound email for recipient + threading.
+    // 4. Look up inbound email for recipient + threading + quoted original.
     const { data: inbound, error: inboundErr } = await supabase
       .from("inbound_emails")
-      .select("from_address, subject, message_id")
+      .select("from_address, subject, message_id, text_body, html_body, received_at")
       .eq("id", body.inbound_email_id)
       .maybeSingle();
     if (inboundErr || !inbound) return json({ error: "Inbound email not found" }, 404);
@@ -82,11 +97,40 @@ Deno.serve(async (req) => {
       body.subject?.trim() ||
       (inbound.subject?.startsWith("Re:") ? inbound.subject : `Re: ${inbound.subject ?? ""}`).trim();
 
-    // 5. Build HTML body. Plain text reply with line breaks preserved.
-    const textBody = body.body.trim();
+    // Auto-quote original message so the reply has context (helps deliverability
+    // and looks like a legitimate conversation).
+    const replyText = body.body.trim();
+    const originalText = (
+      inbound.text_body ??
+      (inbound.html_body ?? "").replace(/<[^>]+>/g, "")
+    ).trim();
+    const originalDate = new Date(inbound.received_at).toLocaleString("en-US", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+    const quotedText = originalText
+      ? `\n\nOn ${originalDate}, ${recipient} wrote:\n${originalText
+          .split("\n")
+          .map((line: string) => `> ${line}`)
+          .join("\n")}`
+      : "";
+
+    const textBody = `${replyText}\n\n${SIGNATURE_TEXT}${quotedText}`;
+
+    const quotedHtml = originalText
+      ? `<blockquote style="margin:16px 0 0 0;padding:0 0 0 12px;border-left:3px solid #ddd;color:#555;font-size:13px;">
+          <p style="color:#888;font-size:12px;margin:0 0 8px 0;">
+            On ${escapeHtml(originalDate)}, ${escapeHtml(recipient)} wrote:
+          </p>
+          <div>${escapeHtml(originalText).replace(/\n/g, "<br/>")}</div>
+        </blockquote>`
+      : "";
+
     const htmlBody = `
       <div style="font-family: Arial, sans-serif; color: #222; font-size: 14px; line-height: 1.5;">
-        ${escapeHtml(textBody).replace(/\n/g, "<br/>")}
+        <div>${escapeHtml(replyText).replace(/\n/g, "<br/>")}</div>
+        ${SIGNATURE_HTML}
+        ${quotedHtml}
       </div>
     `;
 
