@@ -78,10 +78,33 @@ Deno.serve(async (req) => {
 
     // 3. Parse body.
     const body = await req.json().catch(() => null) as
-      | { inbound_email_id?: string; body?: string; subject?: string }
+      | {
+          inbound_email_id?: string;
+          body?: string;
+          subject?: string;
+          attachments?: Array<{ filename?: string; content?: string; content_type?: string }>;
+        }
       | null;
     if (!body?.inbound_email_id || !body?.body?.trim()) {
       return json({ error: "inbound_email_id and body are required" }, 400);
+    }
+
+    // Validate + normalize attachments. Resend wants { filename, content } where
+    // content is base64. Cap total payload to ~20MB to stay under Resend's 40MB limit.
+    const rawAttachments = Array.isArray(body.attachments) ? body.attachments : [];
+    const attachments = rawAttachments
+      .filter((a) => a && typeof a.filename === "string" && typeof a.content === "string")
+      .map((a) => ({
+        filename: a.filename!,
+        content: a.content!,
+        ...(a.content_type ? { content_type: a.content_type } : {}),
+      }));
+    const totalBytes = attachments.reduce(
+      (sum, a) => sum + Math.floor((a.content.length * 3) / 4),
+      0,
+    );
+    if (totalBytes > 20 * 1024 * 1024) {
+      return json({ error: "Attachments exceed 20MB total" }, 413);
     }
 
     // 4. Look up inbound email for recipient + threading + quoted original.
@@ -143,6 +166,9 @@ Deno.serve(async (req) => {
       html: htmlBody,
       text: textBody,
     };
+    if (attachments.length > 0) {
+      resendPayload.attachments = attachments;
+    }
     if (inbound.message_id) {
       resendPayload.headers = {
         "In-Reply-To": inbound.message_id,

@@ -75,7 +75,12 @@ Deno.serve(async (req) => {
 
     // Parse + validate.
     const body = await req.json().catch(() => null) as
-      | { to?: string | string[]; subject?: string; body?: string }
+      | {
+          to?: string | string[];
+          subject?: string;
+          body?: string;
+          attachments?: Array<{ filename?: string; content?: string; content_type?: string }>;
+        }
       | null;
     if (!body?.to || !body?.subject?.trim() || !body?.body?.trim()) {
       return json({ error: "to, subject and body are required" }, 400);
@@ -84,6 +89,24 @@ Deno.serve(async (req) => {
       ? body.to.filter((t) => typeof t === "string" && t.trim())
       : [body.to.trim()];
     if (recipients.length === 0) return json({ error: "No valid recipients" }, 400);
+
+    // Validate + normalize attachments. Resend wants { filename, content } where
+    // content is base64. Cap total payload to ~20MB to stay under Resend's 40MB limit.
+    const rawAttachments = Array.isArray(body.attachments) ? body.attachments : [];
+    const attachments = rawAttachments
+      .filter((a) => a && typeof a.filename === "string" && typeof a.content === "string")
+      .map((a) => ({
+        filename: a.filename!,
+        content: a.content!,
+        ...(a.content_type ? { content_type: a.content_type } : {}),
+      }));
+    const totalBytes = attachments.reduce(
+      (sum, a) => sum + Math.floor((a.content.length * 3) / 4),
+      0,
+    );
+    if (totalBytes > 20 * 1024 * 1024) {
+      return json({ error: "Attachments exceed 20MB total" }, 413);
+    }
 
     const userText = body.body.trim();
     const textBody = `${userText}\n\n${SIGNATURE_TEXT}`;
@@ -107,6 +130,7 @@ Deno.serve(async (req) => {
         subject: body.subject.trim(),
         html: htmlBody,
         text: textBody,
+        ...(attachments.length > 0 ? { attachments } : {}),
       }),
     });
     const resendJson = await resendRes.json().catch(() => ({}));

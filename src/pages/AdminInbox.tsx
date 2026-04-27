@@ -112,6 +112,28 @@ const formatDate = (iso: string) => {
   });
 };
 
+const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024; // 20MB total
+
+const formatBytes = (n: number) => {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+};
+
+// Read a File as base64 (without the data: URL prefix). Used to attach files
+// to outbound emails via Resend.
+const fileToBase64 = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const comma = result.indexOf(",");
+      resolve(comma >= 0 ? result.slice(comma + 1) : result);
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+
 const buildQuotedReply = (email: InboundDetail): string => {
   const { name } = parseAddress(email.from_address);
   const date = new Date(email.received_at).toLocaleString();
@@ -160,6 +182,8 @@ const AdminInbox = () => {
   // Reply composer
   const [replyBody, setReplyBody] = useState("");
   const [sendingReply, setSendingReply] = useState(false);
+  const [replyFiles, setReplyFiles] = useState<File[]>([]);
+  const replyFileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Compose new
   const [composeOpen, setComposeOpen] = useState(false);
@@ -167,6 +191,8 @@ const AdminInbox = () => {
   const [composeSubject, setComposeSubject] = useState("");
   const [composeBody, setComposeBody] = useState("");
   const [composeSending, setComposeSending] = useState(false);
+  const [composeFiles, setComposeFiles] = useState<File[]>([]);
+  const composeFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const titleBase = "Admin Inbox";
   const sessionRef = useRef<Session | null>(null);
@@ -366,15 +392,33 @@ const AdminInbox = () => {
   // ---------- reply ----------
   const sendReply = async () => {
     if (!selected || !replyBody.trim() || !session) return;
+    const totalBytes = replyFiles.reduce((s, f) => s + f.size, 0);
+    if (totalBytes > MAX_ATTACHMENT_BYTES) {
+      toast.error("Attachments exceed 20MB total.");
+      return;
+    }
     setSendingReply(true);
     try {
+      const attachments = await Promise.all(
+        replyFiles.map(async (f) => ({
+          filename: f.name,
+          content: await fileToBase64(f),
+          content_type: f.type || "application/octet-stream",
+        })),
+      );
       await callFn("send-admin-reply", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ inbound_email_id: selected.id, body: replyBody }),
+        body: JSON.stringify({
+          inbound_email_id: selected.id,
+          body: replyBody,
+          ...(attachments.length > 0 ? { attachments } : {}),
+        }),
       });
       toast.success(`Reply sent to ${parseAddress(selected.from_address).name}`);
       setReplyBody("");
+      setReplyFiles([]);
+      if (replyFileInputRef.current) replyFileInputRef.current.value = "";
       // Refresh thread to include the new reply.
       openEmail(selected.id);
     } catch (err) {
@@ -382,6 +426,15 @@ const AdminInbox = () => {
     } finally {
       setSendingReply(false);
     }
+  };
+
+  const addReplyFiles = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setReplyFiles((prev) => [...prev, ...Array.from(files)]);
+  };
+
+  const removeReplyFile = (idx: number) => {
+    setReplyFiles((prev) => prev.filter((_, i) => i !== idx));
   };
 
   const insertQuotedOriginal = () => {
@@ -416,23 +469,51 @@ const AdminInbox = () => {
       toast.error("To, subject, and body are required.");
       return;
     }
+    const totalBytes = composeFiles.reduce((s, f) => s + f.size, 0);
+    if (totalBytes > MAX_ATTACHMENT_BYTES) {
+      toast.error("Attachments exceed 20MB total.");
+      return;
+    }
     setComposeSending(true);
     try {
+      const attachments = await Promise.all(
+        composeFiles.map(async (f) => ({
+          filename: f.name,
+          content: await fileToBase64(f),
+          content_type: f.type || "application/octet-stream",
+        })),
+      );
       await callFn("send-admin-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ to, subject: composeSubject, body: composeBody }),
+        body: JSON.stringify({
+          to,
+          subject: composeSubject,
+          body: composeBody,
+          ...(attachments.length > 0 ? { attachments } : {}),
+        }),
       });
       toast.success(`Email sent to ${to.join(", ")}`);
       setComposeOpen(false);
       setComposeTo("");
       setComposeSubject("");
       setComposeBody("");
+      setComposeFiles([]);
+      if (composeFileInputRef.current) composeFileInputRef.current.value = "";
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to send");
     } finally {
       setComposeSending(false);
     }
+  };
+
+  const addComposeFiles = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setComposeFiles((prev) => [...prev, ...Array.from(files)]);
+  };
+
+  const removeComposeFile = (idx: number) => {
+    setComposeFiles((prev) => prev.filter((_, i) => i !== idx));
   };
 
   // ---------- attachment download ----------
@@ -933,7 +1014,44 @@ const AdminInbox = () => {
                   rows={6}
                   className="resize-y"
                 />
-                <div className="flex justify-end">
+                <input
+                  ref={replyFileInputRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    addReplyFiles(e.target.files);
+                    e.target.value = "";
+                  }}
+                />
+                {replyFiles.length > 0 && (
+                  <ul className="text-xs space-y-1">
+                    {replyFiles.map((f, i) => (
+                      <li key={`${f.name}-${i}`} className="flex items-center gap-2">
+                        <span className="truncate">📎 {f.name}</span>
+                        <span className="text-muted-foreground">({formatBytes(f.size)})</span>
+                        <button
+                          type="button"
+                          onClick={() => removeReplyFile(i)}
+                          className="text-muted-foreground hover:text-foreground"
+                          aria-label={`Remove ${f.name}`}
+                        >
+                          ✕
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <div className="flex items-center justify-between">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => replyFileInputRef.current?.click()}
+                    disabled={sendingReply}
+                  >
+                    Attach files
+                  </Button>
                   <Button onClick={sendReply} disabled={sendingReply || !replyBody.trim()}>
                     {sendingReply ? "Sending…" : "Send reply"}
                   </Button>
@@ -980,6 +1098,50 @@ const AdminInbox = () => {
                 rows={10}
                 className="resize-y"
               />
+            </div>
+            <input
+              ref={composeFileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                addComposeFiles(e.target.files);
+                e.target.value = "";
+              }}
+            />
+            <div>
+              <div className="flex items-center justify-between">
+                <Label>Attachments</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => composeFileInputRef.current?.click()}
+                  disabled={composeSending}
+                >
+                  Add files
+                </Button>
+              </div>
+              {composeFiles.length === 0 ? (
+                <p className="text-xs text-muted-foreground mt-1">No files attached.</p>
+              ) : (
+                <ul className="text-xs space-y-1 mt-2">
+                  {composeFiles.map((f, i) => (
+                    <li key={`${f.name}-${i}`} className="flex items-center gap-2">
+                      <span className="truncate">📎 {f.name}</span>
+                      <span className="text-muted-foreground">({formatBytes(f.size)})</span>
+                      <button
+                        type="button"
+                        onClick={() => removeComposeFile(i)}
+                        className="text-muted-foreground hover:text-foreground"
+                        aria-label={`Remove ${f.name}`}
+                      >
+                        ✕
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </div>
           <DialogFooter>
