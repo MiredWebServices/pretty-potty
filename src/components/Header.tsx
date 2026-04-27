@@ -4,6 +4,7 @@ import { Menu, X, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NAV, SITE } from "@/lib/site";
 import { cn } from "@/lib/utils";
+import logoImage from "@/assets/logo-image.png";
 
 const Header = () => {
   const [open, setOpen] = useState(false);
@@ -27,7 +28,13 @@ const Header = () => {
       )}
     >
       <div className="container-tight flex h-16 md:h-20 items-center justify-between gap-4">
-        <Link to="/" className="flex items-center gap-2 group">
+        <Link to="/" className="flex items-center gap-2 group" aria-label="Pretty Potty home">
+          <img
+            src={logoImage}
+            alt=""
+            aria-hidden="true"
+            className="h-10 md:h-12 w-auto object-contain"
+          />
           <span className="font-serif text-2xl md:text-[1.75rem] tracking-tight text-ink">
             Pretty <span className="italic text-primary">Potty</span>
           </span>
