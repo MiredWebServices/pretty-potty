@@ -94,11 +94,25 @@ Deno.serve(async (req) => {
     const rawAttachments = Array.isArray(body.attachments) ? body.attachments : [];
     const attachments = rawAttachments
       .filter((a) => a && typeof a.filename === "string" && typeof a.content === "string")
-      .map((a) => ({
-        filename: a.filename!,
-        content: a.content!,
-        ...(a.content_type ? { content_type: a.content_type } : {}),
-      }));
+      .map((a, i) => {
+        const isImage = (a.content_type ?? "").toLowerCase().startsWith("image/");
+        return {
+          filename: a.filename!,
+          content: a.content!,
+          ...(a.content_type ? { content_type: a.content_type } : {}),
+          // Tag images with a Content-ID so we can embed them inline via cid:.
+          ...(isImage ? { content_id: `inline-${i}@prettypotty` } : {}),
+        };
+      });
+    // HTML to inline-embed image attachments inside the body. Non-image
+    // attachments still appear as regular email attachments.
+    const inlineImagesHtml = attachments
+      .filter((a) => "content_id" in a)
+      .map(
+        (a) =>
+          `<div style="margin:12px 0;"><img src="cid:${a.content_id}" alt="${escapeHtml(a.filename)}" style="max-width:100%;height:auto;display:block;border-radius:4px;" /></div>`,
+      )
+      .join("");
     const totalBytes = attachments.reduce(
       (sum, a) => sum + Math.floor((a.content.length * 3) / 4),
       0,
@@ -152,6 +166,7 @@ Deno.serve(async (req) => {
     const htmlBody = `
       <div style="font-family: Arial, sans-serif; color: #222; font-size: 14px; line-height: 1.5;">
         <div>${escapeHtml(replyText).replace(/\n/g, "<br/>")}</div>
+        ${inlineImagesHtml}
         ${SIGNATURE_HTML}
         ${quotedHtml}
       </div>
