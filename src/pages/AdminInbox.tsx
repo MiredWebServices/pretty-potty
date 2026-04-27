@@ -184,6 +184,8 @@ const AdminInbox = () => {
   const [sendingReply, setSendingReply] = useState(false);
   const [replyFiles, setReplyFiles] = useState<File[]>([]);
   const replyFileInputRef = useRef<HTMLInputElement | null>(null);
+  const replyImageInputRef = useRef<HTMLInputElement | null>(null);
+  const replyTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   // Compose new
   const [composeOpen, setComposeOpen] = useState(false);
@@ -193,6 +195,8 @@ const AdminInbox = () => {
   const [composeSending, setComposeSending] = useState(false);
   const [composeFiles, setComposeFiles] = useState<File[]>([]);
   const composeFileInputRef = useRef<HTMLInputElement | null>(null);
+  const composeImageInputRef = useRef<HTMLInputElement | null>(null);
+  const composeTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const titleBase = "Admin Inbox";
   const sessionRef = useRef<Session | null>(null);
@@ -437,6 +441,29 @@ const AdminInbox = () => {
     setReplyFiles((prev) => prev.filter((_, i) => i !== idx));
   };
 
+  // Insert image attachments at the textarea cursor as `[image: filename]`
+  // markers. The edge function replaces these markers with actual inline images.
+  const insertReplyImagesAtCursor = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const list = Array.from(files);
+    setReplyFiles((prev) => [...prev, ...list]);
+    const markers = list.map((f) => `[image: ${f.name}]`).join("\n");
+    const ta = replyTextareaRef.current;
+    if (!ta) {
+      setReplyBody((prev) => prev + (prev && !prev.endsWith("\n") ? "\n" : "") + markers);
+      return;
+    }
+    const start = ta.selectionStart ?? replyBody.length;
+    const end = ta.selectionEnd ?? replyBody.length;
+    const next = replyBody.slice(0, start) + markers + replyBody.slice(end);
+    setReplyBody(next);
+    requestAnimationFrame(() => {
+      ta.focus();
+      const pos = start + markers.length;
+      ta.setSelectionRange(pos, pos);
+    });
+  };
+
   const insertQuotedOriginal = () => {
     if (!selected) return;
     setReplyBody((prev) => prev + buildQuotedReply(selected));
@@ -514,6 +541,27 @@ const AdminInbox = () => {
 
   const removeComposeFile = (idx: number) => {
     setComposeFiles((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const insertComposeImagesAtCursor = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const list = Array.from(files);
+    setComposeFiles((prev) => [...prev, ...list]);
+    const markers = list.map((f) => `[image: ${f.name}]`).join("\n");
+    const ta = composeTextareaRef.current;
+    if (!ta) {
+      setComposeBody((prev) => prev + (prev && !prev.endsWith("\n") ? "\n" : "") + markers);
+      return;
+    }
+    const start = ta.selectionStart ?? composeBody.length;
+    const end = ta.selectionEnd ?? composeBody.length;
+    const next = composeBody.slice(0, start) + markers + composeBody.slice(end);
+    setComposeBody(next);
+    requestAnimationFrame(() => {
+      ta.focus();
+      const pos = start + markers.length;
+      ta.setSelectionRange(pos, pos);
+    });
   };
 
   // ---------- attachment download ----------
@@ -1008,9 +1056,10 @@ const AdminInbox = () => {
                   Sending as <strong>hello@getprettypotty.com</strong>. Threaded as a reply.
                 </p>
                 <Textarea
+                  ref={replyTextareaRef}
                   value={replyBody}
                   onChange={(e) => setReplyBody(e.target.value)}
-                  placeholder="Type your reply…"
+                  placeholder="Type your reply… use Insert image to embed pictures inline."
                   rows={6}
                   className="resize-y"
                 />
@@ -1021,6 +1070,17 @@ const AdminInbox = () => {
                   className="hidden"
                   onChange={(e) => {
                     addReplyFiles(e.target.files);
+                    e.target.value = "";
+                  }}
+                />
+                <input
+                  ref={replyImageInputRef}
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    insertReplyImagesAtCursor(e.target.files);
                     e.target.value = "";
                   }}
                 />
@@ -1042,16 +1102,27 @@ const AdminInbox = () => {
                     ))}
                   </ul>
                 )}
-                <div className="flex items-center justify-between">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => replyFileInputRef.current?.click()}
-                    disabled={sendingReply}
-                  >
-                    Attach files
-                  </Button>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => replyImageInputRef.current?.click()}
+                      disabled={sendingReply}
+                    >
+                      Insert image
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => replyFileInputRef.current?.click()}
+                      disabled={sendingReply}
+                    >
+                      Attach files
+                    </Button>
+                  </div>
                   <Button onClick={sendReply} disabled={sendingReply || !replyBody.trim()}>
                     {sendingReply ? "Sending…" : "Send reply"}
                   </Button>
@@ -1093,6 +1164,7 @@ const AdminInbox = () => {
               <Label htmlFor="compose-body">Message</Label>
               <Textarea
                 id="compose-body"
+                ref={composeTextareaRef}
                 value={composeBody}
                 onChange={(e) => setComposeBody(e.target.value)}
                 rows={10}
@@ -1109,18 +1181,40 @@ const AdminInbox = () => {
                 e.target.value = "";
               }}
             />
+            <input
+              ref={composeImageInputRef}
+              type="file"
+              multiple
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                insertComposeImagesAtCursor(e.target.files);
+                e.target.value = "";
+              }}
+            />
             <div>
               <div className="flex items-center justify-between">
                 <Label>Attachments</Label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => composeFileInputRef.current?.click()}
-                  disabled={composeSending}
-                >
-                  Add files
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => composeImageInputRef.current?.click()}
+                    disabled={composeSending}
+                  >
+                    Insert image
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => composeFileInputRef.current?.click()}
+                    disabled={composeSending}
+                  >
+                    Add files
+                  </Button>
+                </div>
               </div>
               {composeFiles.length === 0 ? (
                 <p className="text-xs text-muted-foreground mt-1">No files attached.</p>

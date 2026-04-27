@@ -104,15 +104,42 @@ Deno.serve(async (req) => {
           ...(isImage ? { content_id: `inline-${i}@prettypotty` } : {}),
         };
       });
-    // HTML to inline-embed image attachments inside the body. Non-image
-    // attachments still appear as regular email attachments.
-    const inlineImagesHtml = attachments
-      .filter((a) => "content_id" in a)
-      .map(
-        (a) =>
-          `<div style="margin:12px 0;"><img src="cid:${a.content_id}" alt="${escapeHtml(a.filename)}" style="max-width:100%;height:auto;display:block;border-radius:4px;" /></div>`,
-      )
-      .join("");
+    // Helpers to embed images inline in the HTML body. The user can place
+    // `[image: filename.jpg]` markers inside their message and we replace each
+    // marker with the corresponding image at that exact position. Any image
+    // attachments not referenced by a marker are appended at the end of the
+    // body (backward-compatible).
+    const imgTag = (a: { content_id?: string; filename: string }) =>
+      `<div style="margin:12px 0;"><img src="cid:${a.content_id}" alt="${escapeHtml(a.filename)}" style="max-width:100%;height:auto;display:block;border-radius:4px;" /></div>`;
+    const imageQueue = new Map<string, Array<typeof attachments[number]>>();
+    for (const a of attachments) {
+      if ("content_id" in a) {
+        const list = imageQueue.get(a.filename) ?? [];
+        list.push(a);
+        imageQueue.set(a.filename, list);
+      }
+    }
+    const consumedCids = new Set<string>();
+    const buildBodyHtml = (text: string): string => {
+      const re = /\[image:\s*([^\]\n]+?)\s*\]/g;
+      let out = "";
+      let last = 0;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(text)) !== null) {
+        out += escapeHtml(text.slice(last, m.index)).replace(/\n/g, "<br/>");
+        const queue = imageQueue.get(m[1]);
+        const att = queue && queue.length > 0 ? queue.shift()! : null;
+        if (att && att.content_id) {
+          consumedCids.add(att.content_id);
+          out += imgTag(att);
+        } else {
+          out += escapeHtml(m[0]);
+        }
+        last = m.index + m[0].length;
+      }
+      out += escapeHtml(text.slice(last)).replace(/\n/g, "<br/>");
+      return out;
+    };
     const totalBytes = attachments.reduce(
       (sum, a) => sum + Math.floor((a.content.length * 3) / 4),
       0,
@@ -163,10 +190,17 @@ Deno.serve(async (req) => {
         </blockquote>`
       : "";
 
+    const replyHtml = buildBodyHtml(replyText);
+    // Any images attached but not referenced inline get appended at the end.
+    const trailingImagesHtml = attachments
+      .filter((a) => "content_id" in a && a.content_id && !consumedCids.has(a.content_id))
+      .map((a) => imgTag(a))
+      .join("");
+
     const htmlBody = `
       <div style="font-family: Arial, sans-serif; color: #222; font-size: 14px; line-height: 1.5;">
-        <div>${escapeHtml(replyText).replace(/\n/g, "<br/>")}</div>
-        ${inlineImagesHtml}
+        <div>${replyHtml}</div>
+        ${trailingImagesHtml}
         ${SIGNATURE_HTML}
         ${quotedHtml}
       </div>
