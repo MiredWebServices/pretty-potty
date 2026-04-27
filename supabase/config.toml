@@ -1,1 +1,7 @@
 project_id = "whvuohkpbcpytmwnhriy"
+
+# Resend inbound webhook — Resend cannot send a Supabase JWT, so disable verification.
+# Authenticity is enforced via Svix signature verification inside the function
+# (RESEND_WEBHOOK_SECRET).
+[functions.receive-email]
+verify_jwt = false

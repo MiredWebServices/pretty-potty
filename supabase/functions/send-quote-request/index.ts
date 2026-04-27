@@ -8,8 +8,9 @@ const corsHeaders = {
 };
 
 const RESEND_API_URL = "https://api.resend.com/emails";
-const NOTIFY_TO = "getprettypotty@gmail.com";
+const NOTIFY_TO = Deno.env.get("NOTIFY_TO_EMAIL") ?? "support@getprettypotty.com";
 const FROM_ADDRESS = "Pretty Potty <hello@getprettypotty.com>";
+const REPLY_TO_ADDRESS = "hello@getprettypotty.com";
 
 const schema = z.object({
   name: z.string().trim().min(1).max(100),
@@ -120,7 +121,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         from: FROM_ADDRESS,
         to: [data.email],
-        reply_to: "getprettypotty@gmail.com",
+        reply_to: REPLY_TO_ADDRESS,
         subject: "We got your request — Pretty Potty Austin",
         html: confirmHtml,
       }),
