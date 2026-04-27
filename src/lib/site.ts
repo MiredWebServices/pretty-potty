@@ -6,6 +6,8 @@ export const SITE = {
   email: "getprettypotty@gmail.com",
   city: "Austin, TX",
   serviceArea: "Austin, Round Rock, Dripping Springs, Georgetown, Wimberley, Fredericksburg, San Marcos & all of Central Texas",
+  instagramHandle: "getprettypotty",
+  instagramUrl: "https://www.instagram.com/getprettypotty/",
 };
 
 export const NAV = [

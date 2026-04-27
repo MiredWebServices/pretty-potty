@@ -1,6 +1,7 @@
 import { ReactNode, useEffect } from "react";
 import Header from "./Header";
 import Footer from "./Footer";
+import SocialRail from "./SocialRail";
 
 interface LayoutProps {
   children: ReactNode;
@@ -36,6 +37,7 @@ const Layout = ({ children, title, description, canonical }: LayoutProps) => {
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <Header />
+      <SocialRail />
       <main className="flex-1 pt-16 md:pt-20">{children}</main>
       <Footer />
     </div>

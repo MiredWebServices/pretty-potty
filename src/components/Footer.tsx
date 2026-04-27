@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Phone, Mail, MapPin } from "lucide-react";
+import { Phone, Mail, MapPin, Instagram } from "lucide-react";
 import { NAV, SITE } from "@/lib/site";
 
 const Footer = () => {
@@ -21,6 +21,14 @@ const Footer = () => {
               <Mail className="h-4 w-4" /> {SITE.email}
             </a>
             <p className="flex items-center gap-2"><MapPin className="h-4 w-4" /> Austin, Texas</p>
+            <a
+              href={SITE.instagramUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 hover:text-primary transition-colors"
+            >
+              <Instagram className="h-4 w-4" /> @{SITE.instagramHandle}
+            </a>
           </div>
         </div>
 
