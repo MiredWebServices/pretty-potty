@@ -180,8 +180,18 @@ Deno.serve(async (req) => {
       // 1. Create a Stripe Product + Price for THIS invoice.
       // We collapse the whole invoice into a single line item priced at total_cents
       // because Payment Links require pre-existing prices and we want exactly one URL.
+      //
+      // Stripe shows this product name on the hosted checkout page, so we use
+      // the customer-friendly email subject (if provided) instead of leaking
+      // the internal invoice_number. Falls back to a generic description.
+      const friendlyName = invoice.email_subject?.trim()
+        ? `Pretty Potty — ${invoice.email_subject.trim()}`
+        : `Pretty Potty service — ${invoice.customer_name}`;
       const productRes = await stripeFetch(STRIPE_KEY, "/v1/products", {
-        name: `${invoice.invoice_number} — ${invoice.customer_name}`,
+        name: friendlyName,
+        // invoice_number is kept in metadata (admin/Stripe dashboard side) so
+        // you can still reconcile, just not displayed to the customer.
+        "metadata[invoice_number]": invoice.invoice_number,
         "metadata[invoice_id]": invoice.id,
       });
       const product = await productRes.json();

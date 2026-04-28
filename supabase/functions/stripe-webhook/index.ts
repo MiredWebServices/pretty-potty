@@ -8,7 +8,8 @@
 //
 // Verifies STRIPE_WEBHOOK_SECRET signature manually (no SDK to keep cold start fast).
 
-import { corsHeaders, serviceClient } from "../_shared/admin.ts";
+import { corsHeaders, serviceClient, siteOrigin } from "../_shared/admin.ts";
+import { sendPaymentConfirmation, sendSignReminder } from "../_shared/email.ts";
 
 const json = (b: unknown, s = 200) =>
   new Response(JSON.stringify(b), {
@@ -79,6 +80,75 @@ Deno.serve(async (req) => {
         channel: "stripe",
         meta: { event_id: event.id, type: event.type, session_id: sessionId },
       });
+
+      // Notify the customer right away.
+      // - If the invoice has a service agreement that still needs signing,
+      //   send the "payment received, please sign" email.
+      // - Otherwise (no doc, or already signed somehow), send the full receipt.
+      try {
+        const { data: invoice } = await supabase
+          .from("invoices")
+          .select("*")
+          .eq("id", updated.id)
+          .maybeSingle();
+        if (invoice && !invoice.payment_confirmed_at) {
+          const [{ data: items }, { data: document }] = await Promise.all([
+            supabase
+              .from("invoice_items")
+              .select("*")
+              .eq("invoice_id", invoice.id)
+              .order("position"),
+            supabase
+              .from("invoice_documents")
+              .select("*")
+              .eq("invoice_id", invoice.id)
+              .maybeSingle(),
+          ]);
+
+          const publicUrl = `${siteOrigin()}/i/${invoice.public_token}`;
+          const needsSigning = document && !document.signed_at;
+
+          const result = needsSigning
+            ? await sendSignReminder({
+                invoice,
+                document,
+                publicUrl,
+                reminderIndex: 0,
+              })
+            : await sendPaymentConfirmation({
+                invoice,
+                items: items ?? [],
+                document,
+                publicUrl,
+              });
+
+          if (result.ok) {
+            // If we sent the full receipt, mark it confirmed so we never
+            // re-send. The sign-reminder path leaves it unset so the cron can
+            // continue nudging.
+            const updates: Record<string, unknown> = {};
+            if (!needsSigning) {
+              updates.payment_confirmed_at = new Date().toISOString();
+            } else {
+              updates.last_sign_reminder_at = new Date().toISOString();
+              updates.sign_reminder_count = (invoice.sign_reminder_count ?? 0) + 1;
+            }
+            await supabase.from("invoices").update(updates).eq("id", invoice.id);
+
+            await supabase.from("invoice_events").insert({
+              invoice_id: invoice.id,
+              type: needsSigning ? "sign_reminded" : "payment_confirmed",
+              channel: "email",
+              meta: { resend_email_id: result.id, trigger: "stripe-webhook" },
+            });
+          } else {
+            console.error("Confirmation email failed:", result.error);
+          }
+        }
+      } catch (e) {
+        // Never let email failures break the webhook (Stripe will retry).
+        console.error("Post-payment email error (non-fatal):", e);
+      }
     }
     return json({ ok: true });
   }

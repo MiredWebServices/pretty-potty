@@ -90,22 +90,28 @@ export default function PublicInvoice() {
 
   const justPaid = params.get("paid") === "1";
 
-  const load = useCallback(async () => {
-    if (!token) return;
-    setLoading(true);
-    try {
-      const r = await fetch(fnUrl("public-invoice", { token }), { headers: publicHeaders });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j?.error ?? `HTTP ${r.status}`);
-      setData(j);
-      setSignerName(j.invoice.customer_name ?? "");
-      setSignerEmail(j.invoice.customer_email ?? "");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load invoice");
-    } finally {
-      setLoading(false);
-    }
-  }, [token]);
+  // `silent` skips the loading spinner so background polls (after Stripe
+  // redirect) don't flash the "Loading invoice..." screen on top of the
+  // already-rendered invoice.
+  const load = useCallback(
+    async (silent = false) => {
+      if (!token) return;
+      if (!silent) setLoading(true);
+      try {
+        const r = await fetch(fnUrl("public-invoice", { token }), { headers: publicHeaders });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j?.error ?? `HTTP ${r.status}`);
+        setData(j);
+        setSignerName((prev) => prev || j.invoice.customer_name || "");
+        setSignerEmail((prev) => prev || j.invoice.customer_email || "");
+      } catch (err) {
+        if (!silent) setError(err instanceof Error ? err.message : "Failed to load invoice");
+      } finally {
+        if (!silent) setLoading(false);
+      }
+    },
+    [token],
+  );
 
   useEffect(() => {
     load();
@@ -124,16 +130,19 @@ export default function PublicInvoice() {
   }, [token]);
 
   // Auto-refresh shortly after returning from Stripe so the webhook has time
-  // to flip status -> 'paid'.
+  // to flip status -> 'paid'. Polls silently (no spinner flash) and stops as
+  // soon as the status indicates the webhook has landed.
+  const status = data?.invoice.status;
   useEffect(() => {
     if (!justPaid) return;
-    const id = setInterval(load, 2500);
+    if (status === "paid" || status === "signed") return;
+    const id = setInterval(() => load(true), 2500);
     const stop = setTimeout(() => clearInterval(id), 30_000);
     return () => {
       clearInterval(id);
       clearTimeout(stop);
     };
-  }, [justPaid, load]);
+  }, [justPaid, status, load]);
 
   // ---------- canvas signature pad ----------
   const setupCanvas = useCallback(() => {

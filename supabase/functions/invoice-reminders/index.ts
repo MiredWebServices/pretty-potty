@@ -12,6 +12,7 @@
 //   +7 days past issued_at -> reminder #3 (final)
 
 import { corsHeaders, serviceClient, siteOrigin } from "../_shared/admin.ts";
+import { sendSignReminder } from "../_shared/email.ts";
 
 const json = (b: unknown, s = 200) =>
   new Response(JSON.stringify(b), {
@@ -180,5 +181,93 @@ Deno.serve(async (req) => {
     summary.push({ id: inv.id, sent: sentChans });
   }
 
-  return json({ ok: true, processed: summary.length, summary });
+  // ----------------------------------------------------------------------
+  // Second pass: paid-but-unsigned invoices. Cadence based on paid_at.
+  //   +1 day  -> sign-reminder #2 (the webhook already fired #1)
+  //   +3 days -> sign-reminder #3
+  //   +5 days -> sign-reminder #4 (final)
+  // ----------------------------------------------------------------------
+  const SIGN_REMINDER_DAYS = [1, 3, 5];
+  const signSummary: Array<{ id: string; sent: string[]; skipped?: string }> = [];
+
+  const { data: paidUnsigned } = await supabase
+    .from("invoices")
+    .select("*, invoice_documents(*)")
+    .eq("status", "paid")
+    .not("paid_at", "is", null)
+    .lte("sign_reminder_count", SIGN_REMINDER_DAYS.length) // +1 already sent at payment time
+    .limit(200);
+
+  for (const inv of paidUnsigned ?? []) {
+    const doc = Array.isArray(inv.invoice_documents)
+      ? inv.invoice_documents[0]
+      : inv.invoice_documents;
+    if (!doc || doc.signed_at) {
+      signSummary.push({ id: inv.id, sent: [], skipped: "no_doc_or_signed" });
+      continue;
+    }
+
+    // sign_reminder_count starts at 1 right after payment (sent by stripe-webhook).
+    // Subsequent indexes 1..3 map to SIGN_REMINDER_DAYS days after paid_at.
+    const idx = (inv.sign_reminder_count ?? 0) - 1;
+    if (idx >= SIGN_REMINDER_DAYS.length) {
+      signSummary.push({ id: inv.id, sent: [], skipped: "max_reached" });
+      continue;
+    }
+    if (idx < 0) {
+      // Webhook hasn't sent the initial reminder yet; skip until it does.
+      signSummary.push({ id: inv.id, sent: [], skipped: "no_initial" });
+      continue;
+    }
+
+    const paidAt = new Date(inv.paid_at).getTime();
+    const ageDays = Math.floor((now - paidAt) / ONE_DAY);
+    const dueDays = SIGN_REMINDER_DAYS[idx];
+    if (ageDays < dueDays) {
+      signSummary.push({ id: inv.id, sent: [], skipped: `wait_${dueDays - ageDays}d` });
+      continue;
+    }
+    if (
+      inv.last_sign_reminder_at &&
+      now - new Date(inv.last_sign_reminder_at).getTime() < 20 * 60 * 60 * 1000
+    ) {
+      signSummary.push({ id: inv.id, sent: [], skipped: "recent" });
+      continue;
+    }
+
+    const publicUrl = `${siteOrigin()}/i/${inv.public_token}`;
+    const result = await sendSignReminder({
+      invoice: inv,
+      document: doc,
+      publicUrl,
+      reminderIndex: idx + 1, // 0 was the immediate one from stripe-webhook
+    });
+
+    if (result.ok) {
+      await supabase
+        .from("invoices")
+        .update({
+          last_sign_reminder_at: new Date().toISOString(),
+          sign_reminder_count: (inv.sign_reminder_count ?? 0) + 1,
+        })
+        .eq("id", inv.id);
+      await supabase.from("invoice_events").insert({
+        invoice_id: inv.id,
+        type: "sign_reminded",
+        channel: "email",
+        meta: { resend_email_id: result.id, reminder_index: idx + 1, trigger: "cron" },
+      });
+      signSummary.push({ id: inv.id, sent: ["email"] });
+    } else {
+      signSummary.push({ id: inv.id, sent: [], skipped: `error:${result.error ?? "unknown"}` });
+    }
+  }
+
+  return json({
+    ok: true,
+    processed: summary.length,
+    summary,
+    sign_processed: signSummary.length,
+    sign_summary: signSummary,
+  });
 });

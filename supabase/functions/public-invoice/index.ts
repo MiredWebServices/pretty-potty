@@ -8,7 +8,8 @@
 // All access is gated by knowledge of the random public_token. We never expose
 // internal_notes, stripe internal IDs, or admin emails.
 
-import { corsHeaders, json, serviceClient } from "../_shared/admin.ts";
+import { corsHeaders, json, serviceClient, siteOrigin } from "../_shared/admin.ts";
+import { sendPaymentConfirmation } from "../_shared/email.ts";
 
 interface SignBody {
   action: "sign";
@@ -152,6 +153,48 @@ Deno.serve(async (req) => {
       channel: "web",
       meta: { ip, ua, signer_name: body.signer_name.trim() },
     });
+
+    // Send the final "all set" confirmation receipt to the customer (best
+    // effort — don't block the response on email).
+    try {
+      if (!invoice.payment_confirmed_at) {
+        const [{ data: items }, { data: signedDoc }] = await Promise.all([
+          supabase
+            .from("invoice_items")
+            .select("*")
+            .eq("invoice_id", invoice.id)
+            .order("position"),
+          supabase
+            .from("invoice_documents")
+            .select("*")
+            .eq("invoice_id", invoice.id)
+            .maybeSingle(),
+        ]);
+        const publicUrl = `${siteOrigin()}/i/${invoice.public_token}`;
+        const result = await sendPaymentConfirmation({
+          invoice: { ...invoice, status: "signed" },
+          items: items ?? [],
+          document: signedDoc,
+          publicUrl,
+        });
+        if (result.ok) {
+          await supabase
+            .from("invoices")
+            .update({ payment_confirmed_at: new Date().toISOString() })
+            .eq("id", invoice.id);
+          await supabase.from("invoice_events").insert({
+            invoice_id: invoice.id,
+            type: "payment_confirmed",
+            channel: "email",
+            meta: { resend_email_id: result.id, trigger: "signed" },
+          });
+        } else {
+          console.error("Final confirmation email failed:", result.error);
+        }
+      }
+    } catch (e) {
+      console.error("Confirmation email error (non-fatal):", e);
+    }
 
     return json({ ok: true });
   }
