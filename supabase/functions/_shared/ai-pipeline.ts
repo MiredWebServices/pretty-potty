@@ -219,8 +219,20 @@ export async function runScheduledAiReply(
   ) {
     // Don't clear next_ai_at — leave it so the cron picks it up after
     // quiet hours end (it's already overdue, will fire as soon as the
-    // window opens).
-    await log(supabase, threadId, "quiet_hours");
+    // window opens). To avoid one audit row per minute for hours, only
+    // log if the most recent system row on this thread isn't already
+    // `quiet_hours`.
+    const { data: lastSys } = await supabase
+      .from("sms_messages")
+      .select("ai_meta")
+      .eq("thread_id", threadId)
+      .eq("role", "system")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (lastSys?.ai_meta?.skipped !== "quiet_hours") {
+      await log(supabase, threadId, "quiet_hours");
+    }
     return;
   }
 
