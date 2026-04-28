@@ -50,7 +50,10 @@ const Footer = () => {
       <div className="border-t border-background/10">
         <div className="container-tight py-6 flex flex-col sm:flex-row gap-3 items-center justify-between text-xs text-background/50">
           <p>© {new Date().getFullYear()} Pretty Potty. All rights reserved.</p>
-          <p>{SITE.tagline}</p>
+          <p className="flex items-center gap-3">
+            <span>{SITE.tagline}</span>
+            <Link to="/admin" className="hover:text-primary transition-colors">Admin</Link>
+          </p>
         </div>
       </div>
     </footer>

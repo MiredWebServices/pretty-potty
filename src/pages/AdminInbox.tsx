@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
+import AdminNav from "@/components/AdminNav";
 import { toast } from "sonner";
 
 // ---------- types ----------
@@ -809,12 +810,7 @@ const AdminInbox = () => {
             <Button variant="outline" size="sm" onClick={loadList} disabled={loading}>
               {loading ? "…" : "Refresh"}
             </Button>
-            <Button variant="outline" size="sm" asChild>
-              <a href="/admin/invoices">Invoices</a>
-            </Button>
-            <Button variant="ghost" size="sm" onClick={signOut}>
-              Sign out
-            </Button>
+            <AdminNav email={session.user.email} onSignOut={signOut} />
           </div>
         </div>
       </header>

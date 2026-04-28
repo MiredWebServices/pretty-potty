@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { callAdminFn } from "@/lib/adminFn";
+import AdminNav from "@/components/AdminNav";
 import { toast } from "sonner";
 
 interface InvoiceRow {
@@ -194,6 +195,12 @@ export default function AdminInvoices() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+        <div className="mb-6">
+          <AdminNav
+            email={session.user.email}
+            onSignOut={() => supabase.auth.signOut()}
+          />
+        </div>
         <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
           <div>
             <h1 className="text-2xl font-semibold">Invoices</h1>
@@ -202,12 +209,6 @@ export default function AdminInvoices() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Link
-              to="/admin/inbox"
-              className="text-sm text-gray-600 hover:text-gray-900 underline"
-            >
-              ← Inbox
-            </Link>
             <Button asChild>
               <Link to="/admin/invoices/new">+ New invoice</Link>
             </Button>
