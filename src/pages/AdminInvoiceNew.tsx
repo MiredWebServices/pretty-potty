@@ -46,7 +46,9 @@ export default function AdminInvoiceNew() {
   const [customerEmail, setCustomerEmail] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [dueAt, setDueAt] = useState(""); // yyyy-mm-dd
-  const [taxDollars, setTaxDollars] = useState("");
+  // Tax rate as a percent string. 8.25 = TX state 6.25 + Austin local 2.
+  const [taxPercent, setTaxPercent] = useState("8.25");
+  const [emailSubject, setEmailSubject] = useState("");
   const [customerNotes, setCustomerNotes] = useState("");
   const [internalNotes, setInternalNotes] = useState("");
   const [items, setItems] = useState<ItemDraft[]>([blankItem()]);
@@ -80,7 +82,11 @@ export default function AdminInvoiceNew() {
     (s, it) => s + Math.round(Number(it.quantity || 0) * dollarsToCents(it.unit_price)),
     0,
   );
-  const taxCents = Math.max(0, dollarsToCents(taxDollars));
+  const taxBps = Math.max(
+    0,
+    Math.round(Number(String(taxPercent).replace(/[^0-9.\-]/g, "") || 0) * 100),
+  );
+  const taxCents = Math.round((subtotalCents * taxBps) / 10_000);
   const totalCents = subtotalCents + taxCents;
 
   const submit = async () => {
@@ -113,8 +119,9 @@ export default function AdminInvoiceNew() {
           customer_name: customerName,
           customer_email: customerEmail,
           customer_phone: customerPhone || undefined,
-          tax_cents: taxCents,
+          tax_rate_bps: taxBps,
           due_at: dueAt ? new Date(dueAt).toISOString() : undefined,
+          email_subject: emailSubject.trim() || undefined,
           customer_notes: customerNotes || undefined,
           internal_notes: internalNotes || undefined,
           items: cleanItems,
@@ -261,14 +268,17 @@ export default function AdminInvoiceNew() {
 
             <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3 items-end">
               <div className="sm:col-start-3">
-                <Label htmlFor="tax">Tax ($)</Label>
+                <Label htmlFor="tax">Sales tax (%)</Label>
                 <Input
                   id="tax"
                   inputMode="decimal"
-                  value={taxDollars}
-                  onChange={(e) => setTaxDollars(e.target.value)}
-                  placeholder="0.00"
+                  value={taxPercent}
+                  onChange={(e) => setTaxPercent(e.target.value)}
+                  placeholder="8.25"
                 />
+                <p className="text-[11px] text-gray-500 mt-1">
+                  TX default: 8.25% ({fmtMoney(taxCents)})
+                </p>
               </div>
               <div className="text-right">
                 <div className="text-xs text-gray-500">Total</div>
@@ -277,15 +287,31 @@ export default function AdminInvoiceNew() {
             </div>
           </section>
 
-          {/* Notes */}
-          <section className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* Email subject + notes */}
+          <section className="space-y-3">
             <div>
-              <Label htmlFor="cnotes">Notes for customer (optional)</Label>
-              <Textarea id="cnotes" value={customerNotes} onChange={(e) => setCustomerNotes(e.target.value)} rows={3} />
+              <Label htmlFor="esubj">
+                Email subject (optional)
+              </Label>
+              <Input
+                id="esubj"
+                value={emailSubject}
+                onChange={(e) => setEmailSubject(e.target.value)}
+                placeholder="e.g. invoice for Smith wedding 5/4/26"
+              />
+              <p className="text-[11px] text-gray-500 mt-1">
+                Shown to the customer in the email subject. Leave blank for the default.
+              </p>
             </div>
-            <div>
-              <Label htmlFor="inotes">Internal notes (not shared)</Label>
-              <Textarea id="inotes" value={internalNotes} onChange={(e) => setInternalNotes(e.target.value)} rows={3} />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="cnotes">Note to customer (shown in email + invoice page)</Label>
+                <Textarea id="cnotes" value={customerNotes} onChange={(e) => setCustomerNotes(e.target.value)} rows={3} />
+              </div>
+              <div>
+                <Label htmlFor="inotes">Internal notes (not shared)</Label>
+                <Textarea id="inotes" value={internalNotes} onChange={(e) => setInternalNotes(e.target.value)} rows={3} />
+              </div>
             </div>
           </section>
 

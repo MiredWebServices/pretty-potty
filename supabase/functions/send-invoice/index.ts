@@ -78,14 +78,27 @@ Deno.serve(async (req) => {
     if (!RESEND_API_KEY) {
       results.email = { ok: false, error: "RESEND_API_KEY not configured" };
     } else {
-      const subject = isReminder
-        ? `Reminder: Invoice ${invoice.invoice_number} from Pretty Potty (${totalStr})`
-        : `Your Pretty Potty invoice ${invoice.invoice_number} — ${totalStr}`;
+      // Customer-facing subject. We deliberately omit the internal invoice
+      // number; admins can set a per-invoice override (e.g. "Smith wedding
+      // 5/4/26") that better describes what the customer is paying for.
+      const baseSubject = invoice.email_subject?.trim()
+        ? `Pretty Potty: ${invoice.email_subject.trim()} — ${totalStr}`
+        : `Your Pretty Potty invoice — ${totalStr}`;
+      const subject = isReminder ? `Reminder: ${baseSubject}` : baseSubject;
 
       const intro = isReminder
-        ? `<p>Just a friendly reminder that your invoice <strong>${escapeHtml(invoice.invoice_number)}</strong> is still awaiting payment.</p>`
+        ? `<p>Hi ${escapeHtml(invoice.customer_name)},</p>
+           <p>Just a friendly reminder that your invoice is still awaiting payment.</p>`
         : `<p>Hi ${escapeHtml(invoice.customer_name)},</p>
            <p>Thanks for choosing Pretty Potty. Your invoice is ready for review and payment.</p>`;
+
+      // Optional note from the admin shown above the line items.
+      const noteBlock = invoice.customer_notes?.trim()
+        ? `<div style="margin:16px 0;padding:12px 16px;background:#f6f7f9;border-radius:8px;
+                       font-size:14px;color:#222;white-space:pre-wrap;">
+             ${escapeHtml(invoice.customer_notes.trim())}
+           </div>`
+        : "";
 
       const itemsRows =
         (items ?? [])
@@ -102,8 +115,8 @@ Deno.serve(async (req) => {
       const html = `
         <div style="font-family:Arial,sans-serif;color:#222;font-size:14px;line-height:1.5;max-width:560px;margin:0 auto;">
           ${intro}
+          ${noteBlock}
           <p style="margin:16px 0;">
-            <strong>Invoice:</strong> ${escapeHtml(invoice.invoice_number)}<br/>
             <strong>Total due:</strong> ${totalStr}
             ${dueStr ? `<br/><strong>Due:</strong> ${dueStr}` : ""}
           </p>
@@ -145,13 +158,16 @@ Deno.serve(async (req) => {
 
       const text = [
         isReminder
-          ? `Reminder: invoice ${invoice.invoice_number} is awaiting payment.`
-          : `Hi ${invoice.customer_name}, your Pretty Potty invoice ${invoice.invoice_number} is ready.`,
+          ? `Hi ${invoice.customer_name}, just a reminder that your Pretty Potty invoice is awaiting payment.`
+          : `Hi ${invoice.customer_name}, your Pretty Potty invoice is ready.`,
+        invoice.customer_notes?.trim() ? `\n${invoice.customer_notes.trim()}\n` : "",
         `Total: ${totalStr}${dueStr ? `, due ${dueStr}` : ""}`,
         `View & pay: ${publicUrl}`,
         "",
         "— Pretty Potty",
-      ].join("\n");
+      ]
+        .filter(Boolean)
+        .join("\n");
 
       const r = await fetch(RESEND_API_URL, {
         method: "POST",
@@ -192,8 +208,8 @@ Deno.serve(async (req) => {
       results.sms = { ok: false, error: "QUO_API_KEY / QUO_FROM_NUMBER not configured" };
     } else {
       const smsBody = isReminder
-        ? `Pretty Potty reminder: invoice ${invoice.invoice_number} for ${totalStr} is awaiting payment. View & pay: ${publicUrl}`
-        : `Pretty Potty: your invoice ${invoice.invoice_number} for ${totalStr} is ready. View & pay: ${publicUrl}`;
+        ? `Pretty Potty reminder: your invoice for ${totalStr} is awaiting payment. View & pay: ${publicUrl}`
+        : `Pretty Potty: your invoice for ${totalStr} is ready. View & pay: ${publicUrl}`;
 
       const r = await fetch(QUO_API_URL, {
         method: "POST",

@@ -24,7 +24,6 @@ const publicHeaders = { apikey: ANON_KEY, Authorization: `Bearer ${ANON_KEY}` };
 interface InvoiceData {
   invoice: {
     id: string;
-    invoice_number: string;
     customer_name: string;
     customer_email: string;
     subtotal_cents: number;
@@ -262,7 +261,7 @@ export default function PublicInvoice() {
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-sm uppercase tracking-wider text-gray-500">Pretty Potty</p>
-              <h1 className="text-2xl font-semibold mt-1">Invoice {invoice.invoice_number}</h1>
+              <h1 className="text-2xl font-semibold mt-1">Your invoice</h1>
               <p className="text-sm text-gray-600 mt-1">Billed to {invoice.customer_name}</p>
             </div>
             <span className={`px-3 py-1 rounded-full text-xs font-medium ${badge.cls}`}>

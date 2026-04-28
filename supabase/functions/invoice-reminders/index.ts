@@ -106,12 +106,18 @@ Deno.serve(async (req) => {
         body: JSON.stringify({
           from: FROM_EMAIL,
           to: [inv.customer_email],
-          subject: `Reminder: invoice ${inv.invoice_number} — ${totalStr}`,
+          subject: inv.email_subject?.trim()
+            ? `Reminder: Pretty Potty: ${inv.email_subject.trim()} — ${totalStr}`
+            : `Reminder: your Pretty Potty invoice — ${totalStr}`,
           html: `<div style="font-family:Arial,sans-serif;color:#222;font-size:14px;line-height:1.5;">
             <p>Hi ${escapeHtml(inv.customer_name)},</p>
-            <p>This is a friendly reminder that your Pretty Potty invoice
-            <strong>${escapeHtml(inv.invoice_number)}</strong> for <strong>${totalStr}</strong>
-            is still awaiting payment.</p>
+            <p>This is a friendly reminder that your Pretty Potty invoice for
+            <strong>${totalStr}</strong> is still awaiting payment.</p>
+            ${
+              inv.customer_notes?.trim()
+                ? `<div style="margin:12px 0;padding:12px 16px;background:#f6f7f9;border-radius:8px;font-size:14px;color:#222;white-space:pre-wrap;">${escapeHtml(inv.customer_notes.trim())}</div>`
+                : ""
+            }
             <p style="margin:24px 0;text-align:center;">
               <a href="${publicUrl}" style="display:inline-block;padding:12px 24px;background:#0f172a;color:#fff;text-decoration:none;border-radius:6px;font-weight:600;">
                 View &amp; pay invoice
@@ -119,7 +125,7 @@ Deno.serve(async (req) => {
             </p>
             <p style="color:#666;font-size:13px;">— Pretty Potty</p>
           </div>`,
-          text: `Reminder: invoice ${inv.invoice_number} for ${totalStr} is awaiting payment.\nView & pay: ${publicUrl}`,
+          text: `Reminder: your Pretty Potty invoice for ${totalStr} is awaiting payment.\nView & pay: ${publicUrl}`,
         }),
       });
       if (r.ok) {
@@ -142,7 +148,7 @@ Deno.serve(async (req) => {
         method: "POST",
         headers: { Authorization: QUO_API_KEY, "Content-Type": "application/json" },
         body: JSON.stringify({
-          content: `Pretty Potty reminder: invoice ${inv.invoice_number} for ${totalStr} is awaiting payment. View & pay: ${publicUrl}`,
+          content: `Pretty Potty reminder: your invoice for ${totalStr} is awaiting payment. View & pay: ${publicUrl}`,
           from: QUO_FROM,
           to: [inv.customer_phone],
         }),

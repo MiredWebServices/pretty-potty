@@ -6,7 +6,9 @@
 //   customer_email: string,
 //   customer_phone?: string,         // E.164
 //   currency?: string,                // default 'usd'
-//   tax_cents?: number,
+//   tax_rate_bps?: number,            // basis points; 825 = 8.25% (default Texas+Austin)
+//   tax_cents?: number,               // legacy override; ignored if tax_rate_bps supplied
+//   email_subject?: string,           // optional subject override for the invoice email
 //   due_at?: string,                  // ISO timestamp
 //   customer_notes?: string,
 //   internal_notes?: string,
@@ -43,13 +45,18 @@ interface CreateInvoiceBody {
   customer_email?: string;
   customer_phone?: string;
   currency?: string;
+  tax_rate_bps?: number;
   tax_cents?: number;
+  email_subject?: string;
   due_at?: string;
   customer_notes?: string;
   internal_notes?: string;
   items?: ItemInput[];
   document?: DocumentInput;
 }
+
+// Default sales tax = 8.25% (TX state 6.25% + Austin/Travis County 2%, capped).
+const DEFAULT_TAX_BPS = 825;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -93,7 +100,18 @@ Deno.serve(async (req) => {
     };
   });
   const subtotal_cents = items.reduce((s, it) => s + it.amount_cents, 0);
-  const tax_cents = Math.max(0, Math.round(Number(body.tax_cents ?? 0)));
+
+  // Tax: prefer percentage (basis points). Falls back to literal cents if a
+  // legacy caller still sends tax_cents.
+  const taxBps =
+    typeof body.tax_rate_bps === "number" && Number.isFinite(body.tax_rate_bps)
+      ? Math.max(0, Math.round(body.tax_rate_bps))
+      : DEFAULT_TAX_BPS;
+  const taxFromBps = Math.round((subtotal_cents * taxBps) / 10_000);
+  const tax_cents =
+    typeof body.tax_cents === "number" && Number.isFinite(body.tax_cents) && body.tax_rate_bps == null
+      ? Math.max(0, Math.round(body.tax_cents))
+      : taxFromBps;
   const total_cents = subtotal_cents + tax_cents;
   if (total_cents < 50) {
     return json({ error: "Invoice total must be at least $0.50 (Stripe minimum)" }, 400);
@@ -110,10 +128,12 @@ Deno.serve(async (req) => {
       customer_phone: body.customer_phone?.trim() || null,
       subtotal_cents,
       tax_cents,
+      tax_rate_bps: taxBps,
       total_cents,
       currency,
       status: "draft",
       due_at: body.due_at ?? null,
+      email_subject: body.email_subject?.trim() || null,
       customer_notes: body.customer_notes?.trim() || null,
       internal_notes: body.internal_notes?.trim() || null,
       created_by: adminEmail,
@@ -184,6 +204,9 @@ Deno.serve(async (req) => {
         "metadata[public_token]": invoice.public_token,
         "after_completion[type]": "redirect",
         "after_completion[redirect][url]": successUrl,
+        // Allow customers to enter promo codes you create in
+        // Stripe Dashboard → Products → Coupons → "Create promotion code".
+        allow_promotion_codes: "true",
       });
       const link = await linkRes.json();
       if (!linkRes.ok) throw new Error(link?.error?.message ?? "Stripe payment link failed");

@@ -25,7 +25,9 @@ interface ViewedBody {
 
 const sanitizeInvoice = (inv: Record<string, unknown>) => ({
   id: inv.id,
-  invoice_number: inv.invoice_number,
+  // Note: we deliberately omit invoice_number from the customer-facing payload
+  // so the hosted invoice page doesn't surface internal numbering. It still
+  // exists in the DB for admin/audit purposes.
   customer_name: inv.customer_name,
   customer_email: inv.customer_email,
   subtotal_cents: inv.subtotal_cents,
