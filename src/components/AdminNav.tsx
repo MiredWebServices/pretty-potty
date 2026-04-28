@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { Inbox, FileText, LogOut } from "lucide-react";
+import { Inbox, FileText, LogOut, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface AdminNavProps {
@@ -9,6 +9,7 @@ interface AdminNavProps {
 
 const tabs = [
   { to: "/admin/inbox", label: "Inbox", icon: Inbox, match: "/admin/inbox" },
+  { to: "/admin/sms", label: "SMS", icon: MessageSquare, match: "/admin/sms" },
   { to: "/admin/invoices", label: "Invoices", icon: FileText, match: "/admin/invoices" },
 ];
 
@@ -27,7 +28,7 @@ const AdminNav = ({ email, onSignOut }: AdminNavProps) => {
                 active
                   ? "bg-primary text-primary-foreground"
                   : "bg-background hover:bg-muted"
-              } ${match === "/admin/invoices" ? "border-l" : ""}`}
+              } ${match !== "/admin/inbox" ? "border-l" : ""}`}
             >
               <Icon className="h-4 w-4" />
               {label}

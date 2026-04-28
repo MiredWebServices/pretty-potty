@@ -13,7 +13,7 @@
     "test:watch": "vitest",
     "sb": "supabase",
     "sb:push": "supabase db push",
-    "sb:deploy": "supabase functions deploy receive-email && supabase functions deploy list-inbound-emails && supabase functions deploy send-admin-reply && supabase functions deploy send-admin-email && supabase functions deploy download-attachment && supabase functions deploy send-quote-request"
+    "sb:deploy": "supabase functions deploy receive-email && supabase functions deploy list-inbound-emails && supabase functions deploy send-admin-reply && supabase functions deploy send-admin-email && supabase functions deploy download-attachment && supabase functions deploy send-quote-request && supabase functions deploy receive-sms --no-verify-jwt && supabase functions deploy sms-process-pending --no-verify-jwt && supabase functions deploy sms-admin"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
