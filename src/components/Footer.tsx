@@ -52,6 +52,7 @@ const Footer = () => {
           <p>© {new Date().getFullYear()} Pretty Potty. All rights reserved.</p>
           <p className="flex items-center gap-3">
             <span>{SITE.tagline}</span>
+            <Link to="/privacy" className="hover:text-primary transition-colors">Privacy</Link>
             <Link to="/admin" className="hover:text-primary transition-colors">Admin</Link>
           </p>
         </div>

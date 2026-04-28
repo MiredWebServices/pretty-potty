@@ -11,6 +11,7 @@ import Construction from "./pages/Construction.tsx";
 import Pricing from "./pages/Pricing.tsx";
 import Gallery from "./pages/Gallery.tsx";
 import Contact from "./pages/Contact.tsx";
+import Privacy from "./pages/Privacy.tsx";
 import AdminInbox from "./pages/AdminInbox.tsx";
 import AdminSMS from "./pages/AdminSMS.tsx";
 import AdminInvoices from "./pages/AdminInvoices.tsx";
@@ -35,6 +36,7 @@ const App = () => (
           <Route path="/pricing" element={<Pricing />} />
           <Route path="/gallery" element={<Gallery />} />
           <Route path="/contact" element={<Contact />} />
+          <Route path="/privacy" element={<Privacy />} />
           <Route path="/admin" element={<Navigate to="/admin/inbox" replace />} />
           <Route path="/admin/inbox" element={<AdminInbox />} />
           <Route path="/admin/sms" element={<AdminSMS />} />
