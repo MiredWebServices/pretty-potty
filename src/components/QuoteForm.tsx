@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,6 +16,11 @@ const schema = z.object({
   location: z.string().trim().max(120).optional(),
   guests: z.string().max(20).optional(),
   message: z.string().trim().max(1000).optional(),
+  smsConsent: z
+    .union([z.literal("on"), z.literal("true"), z.boolean()])
+    .refine((v) => v === true || v === "on" || v === "true", {
+      message: "Please agree to receive text messages to continue",
+    }),
 });
 
 interface QuoteFormProps {
@@ -104,6 +110,21 @@ const QuoteForm = ({ variant = "card" }: QuoteFormProps) => {
         <div className="space-y-1.5 sm:col-span-2">
           <Label htmlFor="message">Tell us more</Label>
           <Textarea id="message" name="message" rows={4} placeholder="Anything else we should know?" />
+        </div>
+        <div className="sm:col-span-2 mt-2 rounded-lg border border-border/60 bg-muted/30 p-4">
+          <div className="flex items-start gap-3">
+            <Checkbox id="smsConsent" name="smsConsent" value="on" required className="mt-0.5" />
+            <Label htmlFor="smsConsent" className="text-sm font-normal leading-relaxed text-muted-foreground cursor-pointer">
+              <span className="text-ink font-medium">I agree to receive text messages from Pretty Potty Austin</span> about my
+              quote request and rental (e.g., quotes, booking confirmations, delivery and pickup updates, and replies to
+              my questions). Message frequency varies. Message and data rates may apply. Reply HELP for help or STOP to
+              opt out at any time. SMS opt‑in data and consent will not be shared with third parties. See our{" "}
+              <a href="/privacy" target="_blank" rel="noopener noreferrer" className="underline text-primary hover:text-primary/80">
+                Privacy Policy
+              </a>
+              .
+            </Label>
+          </div>
         </div>
       </div>
       <Button type="submit" variant="hero" size="lg" className="mt-6 w-full" disabled={submitting}>
